@@ -1,0 +1,356 @@
+-- OT7 FOOTBALL SCRIPT made by Scripting Madness - Wide Long Rectangle UI - PC + MOBILE - Lag Fixed
+-- Auto Reach completely removed. Nothing else changed.
+
+local Players = game:GetService("Players")
+local Workspace = game:GetService("Workspace")
+local RunService = game:GetService("RunService")
+local UserInputService = game:GetService("UserInputService")
+local TweenService = game:GetService("TweenService")
+
+local LocalPlayer = Players.LocalPlayer
+local Character = LocalPlayer.Character or LocalPlayer.CharacterAdded:Wait()
+local Humanoid = Character:WaitForChild("Humanoid")
+local RootPart = Character:WaitForChild("HumanoidRootPart")
+
+-- Settings
+local Settings = {
+    WalkSpeed = 50,
+    JumpPower = 100,
+    InfiniteJump = false,
+    MagStrength = 30,
+    BallHighlightEnabled = false
+}
+
+-- Optimized Ball Finder (cached + throttled to reduce lag)
+local CurrentBall = nil
+local lastBallSearch = 0
+local function FindBall()
+    local now = tick()
+    if now - lastBallSearch < 0.4 then return CurrentBall end
+    lastBallSearch = now
+    
+    local candidates = {}
+    for _, v in ipairs(Workspace:GetDescendants()) do
+        if (v:IsA("BasePart") or v:IsA("MeshPart")) and v.Size.Magnitude < 10 then
+            local name = v.Name:lower()
+            if name:find("ball") or name:find("football") or name:find("pigskin") or name:find("rb") or v:FindFirstChild("Football") then
+                table.insert(candidates, v)
+            end
+        end
+    end
+    if #candidates > 0 then
+        table.sort(candidates, function(a,b) return (RootPart.Position - a.Position).Magnitude < (RootPart.Position - b.Position).Magnitude end)
+        CurrentBall = candidates[1]
+        return CurrentBall
+    end
+    CurrentBall = Workspace:FindFirstChild("Ball") or Workspace:FindFirstChild("Football")
+    return CurrentBall
+end
+
+-- Strong IsBallHeld
+local function IsBallHeld(ball)
+    if not ball then return true end
+    local parent = ball.Parent
+    if parent and parent:IsA("Model") and Players:GetPlayerFromCharacter(parent) then return true end
+    if ball:FindFirstChildWhichIsA("Weld") or ball:FindFirstChildWhichIsA("Motor6D") or ball:FindFirstChild("Grip") or ball:FindFirstChildWhichIsA("Attachment") then return true end
+    if ball:FindFirstChildWhichIsA("Tool") or ball.Parent:FindFirstChildWhichIsA("Humanoid") or (ball.Velocity.Magnitude < 5 and (RootPart.Position - ball.Position).Magnitude < 8) then
+        return true
+    end
+    return false
+end
+
+-- Ball Visual - "🔥 BALL"
+local BallHighlight, BallBillboard = nil, nil
+local function UpdateBallVisual(ball)
+    if not Settings.BallHighlightEnabled or not ball then
+        if BallHighlight then BallHighlight:Destroy() BallHighlight = nil end
+        if BallBillboard then BallBillboard:Destroy() BallBillboard = nil end
+        return
+    end
+    if not BallHighlight or BallHighlight.Parent ~= ball then
+        if BallHighlight then BallHighlight:Destroy() end
+        BallHighlight = Instance.new("Highlight")
+        BallHighlight.FillColor = Color3.fromRGB(255, 255, 255)
+        BallHighlight.OutlineColor = Color3.fromRGB(200, 200, 200)
+        BallHighlight.OutlineTransparency = 0
+        BallHighlight.FillTransparency = 0.6
+        BallHighlight.Parent = ball
+    end
+    if not BallBillboard or BallBillboard.Adornee ~= ball then
+        if BallBillboard then BallBillboard:Destroy() end
+        BallBillboard = Instance.new("BillboardGui")
+        BallBillboard.Adornee = ball
+        BallBillboard.Size = UDim2.new(0, 140, 0, 70)
+        BallBillboard.StudsOffset = Vector3.new(0, 5, 0)
+        BallBillboard.AlwaysOnTop = true
+        BallBillboard.Parent = ball
+        local text = Instance.new("TextLabel", BallBillboard)
+        text.Size = UDim2.new(1,0,1,0)
+        text.BackgroundTransparency = 1
+        text.Text = "🔥 BALL"
+        text.TextColor3 = Color3.fromRGB(255, 255, 255)
+        text.TextScaled = true
+        text.Font = Enum.Font.GothamBold
+    end
+end
+
+-- Speed Enforcer
+local SpeedLoop = nil
+local function StartSpeedLoop()
+    if SpeedLoop then SpeedLoop:Disconnect() end
+    SpeedLoop = RunService.Heartbeat:Connect(function()
+        if Humanoid then
+            Humanoid.WalkSpeed = Settings.WalkSpeed
+            Humanoid.JumpPower = Settings.JumpPower
+        end
+    end)
+end
+
+-- Optimized Smooth Magnet (Mag Strength only)
+local MagConnection = nil
+local function UpdateMags()
+    if MagConnection then MagConnection:Disconnect() MagConnection = nil end
+    MagConnection = RunService.Heartbeat:Connect(function()
+        local ball = FindBall()
+        if ball and RootPart and not IsBallHeld(ball) then
+            local dir = (RootPart.Position - ball.Position).Unit
+            ball.Velocity = ball.Velocity:Lerp(dir * Settings.MagStrength, 0.65)
+            UpdateBallVisual(ball)
+        else
+            UpdateBallVisual(ball)
+        end
+    end)
+end
+
+-- Infinite Jump
+UserInputService.JumpRequest:Connect(function()
+    if Settings.InfiniteJump and Humanoid then
+        Humanoid:ChangeState(Enum.HumanoidStateType.Jumping)
+    end
+end)
+
+-- WIDE LONG RECTANGLE UI - PC + MOBILE, Smooth Drag, No Lag Scrolling
+local ScreenGui = Instance.new("ScreenGui")
+ScreenGui.ResetOnSpawn = false
+ScreenGui.Parent = LocalPlayer:WaitForChild("PlayerGui")
+
+local MainFrame = Instance.new("Frame")
+MainFrame.Size = UDim2.new(0, 520, 0, 650)
+MainFrame.Position = UDim2.new(0.6, 0, 0.08, 0)
+MainFrame.BackgroundColor3 = Color3.fromRGB(8, 8, 8)
+MainFrame.BorderSizePixel = 0
+MainFrame.Visible = true
+MainFrame.Parent = ScreenGui
+Instance.new("UICorner", MainFrame).CornerRadius = UDim.new(0, 16)
+
+-- Draggable Title Bar
+local TitleBar = Instance.new("Frame")
+TitleBar.Size = UDim2.new(1, 0, 0, 65)
+TitleBar.BackgroundColor3 = Color3.fromRGB(20, 20, 20)
+TitleBar.BorderSizePixel = 0
+TitleBar.Parent = MainFrame
+Instance.new("UICorner", TitleBar).CornerRadius = UDim.new(0, 16)
+
+local Title = Instance.new("TextLabel")
+Title.Text = "OT7 FOOTBALL SCRIPT made by Scripting Madness"
+Title.Size = UDim2.new(1, 0, 1, 0)
+Title.BackgroundTransparency = 1
+Title.TextColor3 = Color3.fromRGB(255, 255, 255)
+Title.Font = Enum.Font.GothamBlack
+Title.TextScaled = true
+Title.Parent = TitleBar
+
+-- Smooth Cross-Platform Drag
+local dragging = false
+local dragStart, startPos
+
+local function startDrag(input)
+    dragging = true
+    dragStart = input.Position
+    startPos = MainFrame.Position
+end
+
+local function updateDrag(input)
+    if dragging then
+        local delta = input.Position - dragStart
+        MainFrame.Position = UDim2.new(startPos.X.Scale, startPos.X.Offset + delta.X, startPos.Y.Scale, startPos.Y.Offset + delta.Y)
+    end
+end
+
+TitleBar.InputBegan:Connect(function(input)
+    if input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.Touch then
+        startDrag(input)
+    end
+end)
+
+TitleBar.InputEnded:Connect(function(input)
+    if input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.Touch then
+        dragging = false
+    end
+end)
+
+UserInputService.InputChanged:Connect(function(input)
+    if dragging and (input.UserInputType == Enum.UserInputType.MouseMovement or input.UserInputType == Enum.UserInputType.Touch) then
+        updateDrag(input)
+    end
+end)
+
+-- Scrolling Frame
+local ScrollingFrame = Instance.new("ScrollingFrame")
+ScrollingFrame.Size = UDim2.new(1, -20, 1, -85)
+ScrollingFrame.Position = UDim2.new(0, 10, 0, 75)
+ScrollingFrame.BackgroundTransparency = 1
+ScrollingFrame.ScrollBarThickness = 10
+ScrollingFrame.ScrollBarImageColor3 = Color3.fromRGB(200, 200, 200)
+ScrollingFrame.ScrollingEnabled = true
+ScrollingFrame.Parent = MainFrame
+
+local UIListLayout = Instance.new("UIListLayout")
+UIListLayout.SortOrder = Enum.SortOrder.LayoutOrder
+UIListLayout.Padding = UDim.new(0, 12)
+UIListLayout.Parent = ScrollingFrame
+
+local function AddSection(title)
+    local lbl = Instance.new("TextLabel")
+    lbl.Text = title
+    lbl.Size = UDim2.new(1, -20, 0, 42)
+    lbl.BackgroundTransparency = 1
+    lbl.TextColor3 = Color3.fromRGB(220, 220, 220)
+    lbl.Font = Enum.Font.GothamSemibold
+    lbl.TextScaled = true
+    lbl.TextXAlignment = Enum.TextXAlignment.Left
+    lbl.Parent = ScrollingFrame
+end
+
+local function CreateControl(name, min, max, default, callback)
+    AddSection(name)
+    
+    local sliderFrame = Instance.new("Frame")
+    sliderFrame.Size = UDim2.new(1, -40, 0, 32)
+    sliderFrame.BackgroundColor3 = Color3.fromRGB(35, 35, 35)
+    sliderFrame.Parent = ScrollingFrame
+    Instance.new("UICorner", sliderFrame).CornerRadius = UDim.new(0, 16)
+    
+    local fill = Instance.new("Frame")
+    fill.Size = UDim2.new((default - min)/(max - min), 0, 1, 0)
+    fill.BackgroundColor3 = Color3.fromRGB(255, 255, 255)
+    fill.Parent = sliderFrame
+    Instance.new("UICorner", fill).CornerRadius = UDim.new(0, 16)
+    
+    local valueLabel = Instance.new("TextLabel")
+    valueLabel.Text = tostring(default)
+    valueLabel.Size = UDim2.new(0, 90, 1, 0)
+    valueLabel.Position = UDim2.new(1, 5, 0, 0)
+    valueLabel.BackgroundTransparency = 1
+    valueLabel.TextColor3 = Color3.fromRGB(255,255,255)
+    valueLabel.TextScaled = true
+    valueLabel.Parent = sliderFrame
+    
+    local textBox = Instance.new("TextBox")
+    textBox.Text = tostring(default)
+    textBox.Size = UDim2.new(0, 120, 0, 38)
+    textBox.BackgroundColor3 = Color3.fromRGB(25,25,25)
+    textBox.TextColor3 = Color3.fromRGB(255,255,255)
+    textBox.TextScaled = true
+    textBox.Parent = ScrollingFrame
+    Instance.new("UICorner", textBox).CornerRadius = UDim.new(0, 16)
+    
+    local draggingSlider = false
+    sliderFrame.InputBegan:Connect(function(inp)
+        if inp.UserInputType == Enum.UserInputType.MouseButton1 or inp.UserInputType == Enum.UserInputType.Touch then
+            draggingSlider = true
+        end
+    end)
+    UserInputService.InputEnded:Connect(function(inp)
+        if inp.UserInputType == Enum.UserInputType.MouseButton1 or inp.UserInputType == Enum.UserInputType.Touch then
+            draggingSlider = false
+        end
+    end)
+    
+    RunService.RenderStepped:Connect(function()
+        if draggingSlider then
+            local mouseX = UserInputService:GetMouseLocation().X
+            local rel = math.clamp((mouseX - sliderFrame.AbsolutePosition.X) / sliderFrame.AbsoluteSize.X, 0, 1)
+            local val = math.floor(min + (max - min) * rel)
+            fill.Size = UDim2.new(rel, 0, 1, 0)
+            valueLabel.Text = tostring(val)
+            textBox.Text = tostring(val)
+            callback(val)
+        end
+    end)
+    
+    textBox.FocusLost:Connect(function()
+        local val = tonumber(textBox.Text)
+        if val then
+            val = math.clamp(val, min, max)
+            local rel = (val - min) / (max - min)
+            fill.Size = UDim2.new(rel, 0, 1, 0)
+            valueLabel.Text = tostring(val)
+            textBox.Text = tostring(val)
+            callback(val)
+        end
+    end)
+end
+
+local function AddToggle(name, default, callback)
+    local btn = Instance.new("TextButton")
+    btn.Size = UDim2.new(1, -40, 0, 55)
+    btn.BackgroundColor3 = default and Color3.fromRGB(60, 60, 60) or Color3.fromRGB(30, 30, 30)
+    btn.Text = name .. ": " .. (default and "ON" or "OFF")
+    btn.TextColor3 = Color3.fromRGB(255, 255, 255)
+    btn.Font = Enum.Font.GothamBold
+    btn.TextScaled = true
+    btn.Parent = ScrollingFrame
+    Instance.new("UICorner", btn).CornerRadius = UDim.new(0, 16)
+    
+    btn.MouseButton1Click:Connect(function()
+        default = not default
+        btn.BackgroundColor3 = default and Color3.fromRGB(60, 60, 60) or Color3.fromRGB(30, 30, 30)
+        btn.Text = name .. ": " .. (default and "ON" or "OFF")
+        callback(default)
+    end)
+end
+
+-- Controls
+CreateControl("WalkSpeed", 16, 120, Settings.WalkSpeed, function(v) Settings.WalkSpeed = v end)
+CreateControl("JumpPower", 50, 250, Settings.JumpPower, function(v) Settings.JumpPower = v end)
+AddToggle("Infinite Jump", Settings.InfiniteJump, function(v) Settings.InfiniteJump = v end)
+CreateControl("Mag Strength", 10, 70, Settings.MagStrength, function(v) Settings.MagStrength = v end)
+AddToggle("Ball Visual", Settings.BallHighlightEnabled, function(v) Settings.BallHighlightEnabled = v; UpdateBallVisual(FindBall()) end)
+
+-- Dynamic Canvas
+local function updateCanvas()
+    ScrollingFrame.CanvasSize = UDim2.new(0, 0, 0, UIListLayout.AbsoluteContentSize.Y + 60)
+end
+UIListLayout:GetPropertyChangedSignal("AbsoluteContentSize"):Connect(updateCanvas)
+updateCanvas()
+
+-- K toggle
+local guiVisible = true
+UserInputService.InputBegan:Connect(function(input, gp)
+    if gp then return end
+    if input.KeyCode == Enum.KeyCode.K then
+        guiVisible = not guiVisible
+        if guiVisible then
+            MainFrame.Visible = true
+            TweenService:Create(MainFrame, TweenInfo.new(0.35, Enum.EasingStyle.Quint), {Size = UDim2.new(0, 520, 0, 650)}):Play()
+        else
+            TweenService:Create(MainFrame, TweenInfo.new(0.35, Enum.EasingStyle.Quint), {Size = UDim2.new(0, 520, 0, 65)}):Play()
+            task.wait(0.35)
+            MainFrame.Visible = false
+        end
+    end
+end)
+
+-- Respawn
+LocalPlayer.CharacterAdded:Connect(function(newChar)
+    Character = newChar
+    Humanoid = newChar:WaitForChild("Humanoid")
+    RootPart = newChar:WaitForChild("HumanoidRootPart")
+    StartSpeedLoop()
+end)
+
+-- Init
+StartSpeedLoop()
+UpdateMags()
+print("✅ OT7 FOOTBALL SCRIPT made by Scripting Madness Loaded - Auto Reach removed, everything else unchanged jit")
